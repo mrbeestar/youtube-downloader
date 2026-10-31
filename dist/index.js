@@ -111,10 +111,11 @@ function nextFridayMidnightCairo(now = Date.now()) {
     }
     return scheduled;
 }
+let weeklyYtDlpUpdateTimer;
 function scheduleWeeklyYtDlpUpdate() {
     const scheduledAt = nextFridayMidnightCairo();
     logger_js_1.logger.info({ scheduledAt: new Date(scheduledAt).toISOString() }, "Scheduled weekly yt-dlp update check");
-    const timer = setTimeout(() => {
+    weeklyYtDlpUpdateTimer = setTimeout(() => {
         void (async () => {
             logger_js_1.logger.info("Starting weekly yt-dlp update check");
             try {
@@ -128,7 +129,7 @@ function scheduleWeeklyYtDlpUpdate() {
             }
         })();
     }, Math.max(0, scheduledAt - Date.now()));
-    timer.unref();
+    weeklyYtDlpUpdateTimer.unref();
 }
 // ── Regexes ───────────────────────────────────────────────────────────────
 const URL_CANDIDATE_REGEX = /https?:\/\/[^\s<>"']+/gi;
@@ -192,7 +193,7 @@ async function main() {
     const ownerId = parseInt(process.env["OWNER_ID"] || "0", 10);
     const bot = new telegraf_1.Telegraf(token);
     await (0, db_js_1.ensureScheduledMessageDeletionsTable)();
-    (0, message_expiration_js_1.startMessageExpirationWorker)(bot.telegram);
+    const stopMessageExpirationWorker = (0, message_expiration_js_1.startMessageExpirationWorker)(bot.telegram);
     const me = await bot.telegram.getMe();
     (0, download_js_1.setBotUsername)(me.username ?? "YourBot");
     logger_js_1.logger.info({ username: me.username }, "Bot identity fetched");
@@ -367,13 +368,7 @@ async function main() {
     bot.catch((err) => { logger_js_1.logger.error({ err }, "Bot error"); });
     // ── Launch ────────────────────────────────────────────────────────────────
     scheduleWeeklyYtDlpUpdate();
-    const shutdown = (signal) => {
-        bot.stop(signal);
-        void (0, mtproto_sender_js_1.stopMtprotoSender)();
-    };
-    process.once("SIGINT", () => shutdown("SIGINT"));
-    process.once("SIGTERM", () => shutdown("SIGTERM"));
-    setInterval(() => {
+    const staleDownloadsCleanup = setInterval(() => {
         void (0, downloader_js_1.cleanupStaleDownloadDirs)().catch((err) => {
             logger_js_1.logger.warn({ err }, "Failed to clean stale download folders");
         });
@@ -386,6 +381,17 @@ async function main() {
         }
     }, 60 * 60 * 1000);
     throttleMapCleanup.unref();
+    const shutdown = (signal) => {
+        clearInterval(staleDownloadsCleanup);
+        clearInterval(throttleMapCleanup);
+        if (weeklyYtDlpUpdateTimer)
+            clearTimeout(weeklyYtDlpUpdateTimer);
+        stopMessageExpirationWorker();
+        bot.stop(signal);
+        void (0, mtproto_sender_js_1.stopMtprotoSender)();
+    };
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
     void bot.launch({ allowedUpdates: ["message", "callback_query"] }).catch((err) => {
         logger_js_1.logger.error({ err }, "Telegram bot polling failed");
         process.exit(1);

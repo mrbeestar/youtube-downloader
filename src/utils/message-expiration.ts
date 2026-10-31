@@ -14,11 +14,12 @@ function telegramErrorCode(error: unknown): number | undefined {
   return typeof response?.error_code === "number" ? response.error_code : undefined;
 }
 
-export function startMessageExpirationWorker(telegram: TelegramApi): void {
+export function startMessageExpirationWorker(telegram: TelegramApi): () => void {
   let isRunning = false;
+  let isStopped = false;
 
   const sweep = async (): Promise<void> => {
-    if (isRunning) return;
+    if (isRunning || isStopped) return;
     isRunning = true;
     try {
       const dueMessages = await getDueMessageDeletions(new Date(), 100);
@@ -52,4 +53,9 @@ export function startMessageExpirationWorker(telegram: TelegramApi): void {
   const timer = setInterval(() => void sweep(), 15_000);
   timer.unref();
   void sweep();
+
+  return () => {
+    isStopped = true;
+    clearInterval(timer);
+  };
 }

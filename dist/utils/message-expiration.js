@@ -11,8 +11,9 @@ function telegramErrorCode(error) {
 }
 function startMessageExpirationWorker(telegram) {
     let isRunning = false;
+    let isStopped = false;
     const sweep = async () => {
-        if (isRunning)
+        if (isRunning || isStopped)
             return;
         isRunning = true;
         try {
@@ -46,5 +47,9 @@ function startMessageExpirationWorker(telegram) {
     const timer = setInterval(() => void sweep(), 15_000);
     timer.unref();
     void sweep();
+    return () => {
+        isStopped = true;
+        clearInterval(timer);
+    };
 }
 //# sourceMappingURL=message-expiration.js.map

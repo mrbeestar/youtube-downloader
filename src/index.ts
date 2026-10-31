@@ -131,11 +131,13 @@ function nextFridayMidnightCairo(now = Date.now()): number {
   return scheduled;
 }
 
+let weeklyYtDlpUpdateTimer: NodeJS.Timeout | undefined;
+
 function scheduleWeeklyYtDlpUpdate(): void {
   const scheduledAt = nextFridayMidnightCairo();
   logger.info({ scheduledAt: new Date(scheduledAt).toISOString() }, "Scheduled weekly yt-dlp update check");
 
-  const timer = setTimeout(() => {
+  weeklyYtDlpUpdateTimer = setTimeout(() => {
     void (async () => {
       logger.info("Starting weekly yt-dlp update check");
       try {
@@ -148,7 +150,7 @@ function scheduleWeeklyYtDlpUpdate(): void {
     })();
   }, Math.max(0, scheduledAt - Date.now()));
 
-  timer.unref();
+  weeklyYtDlpUpdateTimer.unref();
 }
 
 // ── Regexes ───────────────────────────────────────────────────────────────
@@ -224,7 +226,7 @@ async function main(): Promise<void> {
   const bot = new Telegraf(token);
 
   await ensureScheduledMessageDeletionsTable();
-  startMessageExpirationWorker(bot.telegram);
+  const stopMessageExpirationWorker = startMessageExpirationWorker(bot.telegram);
 
   const me = await bot.telegram.getMe();
   setBotUsername(me.username ?? "YourBot");
@@ -422,14 +424,7 @@ async function main(): Promise<void> {
   // ── Launch ────────────────────────────────────────────────────────────────
   scheduleWeeklyYtDlpUpdate();
 
-  const shutdown = (signal: "SIGINT" | "SIGTERM") => {
-    bot.stop(signal);
-    void stopMtprotoSender();
-  };
-  process.once("SIGINT",  () => shutdown("SIGINT"));
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
-
-  setInterval(() => {
+  const staleDownloadsCleanup = setInterval(() => {
     void cleanupStaleDownloadDirs().catch((err) => {
       logger.warn({ err }, "Failed to clean stale download folders");
     });
@@ -442,6 +437,17 @@ async function main(): Promise<void> {
     }
   }, 60 * 60 * 1000);
   throttleMapCleanup.unref();
+
+  const shutdown = (signal: "SIGINT" | "SIGTERM") => {
+    clearInterval(staleDownloadsCleanup);
+    clearInterval(throttleMapCleanup);
+    if (weeklyYtDlpUpdateTimer) clearTimeout(weeklyYtDlpUpdateTimer);
+    stopMessageExpirationWorker();
+    bot.stop(signal);
+    void stopMtprotoSender();
+  };
+  process.once("SIGINT",  () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 
   void bot.launch({ allowedUpdates: ["message", "callback_query"] }).catch((err) => {
     logger.error({ err }, "Telegram bot polling failed");
