@@ -7,7 +7,6 @@ import {
   downloadLogsTable,
   videoRegistryTable,
   SETTINGS_KEYS,
-  type InsertUser,
   type InsertDownloadLog,
 } from "./schema.js";
 import { eq, count, sql, lt } from "drizzle-orm";
