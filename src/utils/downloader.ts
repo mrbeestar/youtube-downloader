@@ -157,6 +157,7 @@ export interface DownloadResult {
   fileName: string;
   fileSize: number;
   ext: string;
+  thumbnailPath?: string;
 }
 
 export async function downloadMedia(
@@ -187,8 +188,10 @@ export async function downloadMedia(
         "--convert-thumbnails", "jpg",
       );
     } else if (formatId === "best_video") {
+      args.push("--write-thumbnail", "--convert-thumbnails", "jpg");
       args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best");
     } else {
+      args.push("--write-thumbnail", "--convert-thumbnails", "jpg");
       const height = formatId.replace("video_", "");
       args.push(
         "-f",
@@ -257,12 +260,32 @@ export async function downloadMedia(
             return;
           }
 
+          let thumbnailPath: string | undefined;
+          if (formatId !== "audio_only") {
+            const thumbnailNames = files
+              .filter((name) => [".jpg", ".jpeg", ".png", ".webp"].includes(extname(name).toLowerCase()))
+              .sort((a, b) => {
+                const extA = extname(a).toLowerCase();
+                const extB = extname(b).toLowerCase();
+                return (extA === ".jpg" ? 0 : 1) - (extB === ".jpg" ? 0 : 1);
+              });
+            for (const name of thumbnailNames) {
+              const path = join(outputDir, name);
+              const info = await stat(path).catch(() => undefined);
+              if (info?.isFile() && info.size > 0) {
+                thumbnailPath = path;
+                break;
+              }
+            }
+          }
+
           settled = true;
           resolve({
             filePath: media.path,
             fileName: media.name,
             fileSize: media.size,
             ext: media.extension.slice(1),
+            thumbnailPath,
           });
         } catch (err) {
           await fail(err instanceof Error ? err : new Error("تعذر قراءة الملف المحمّل"));

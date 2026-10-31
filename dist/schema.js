@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.videoRegistryTable = exports.insertDownloadLogSchema = exports.downloadLogsTable = exports.SETTINGS_KEYS = exports.insertSettingSchema = exports.settingsTable = exports.insertChannelSchema = exports.channelsTable = exports.insertAdminSchema = exports.adminsTable = exports.insertUserSchema = exports.usersTable = void 0;
+exports.scheduledMessageDeletionsTable = exports.videoRegistryTable = exports.insertDownloadLogSchema = exports.downloadLogsTable = exports.SETTINGS_KEYS = exports.insertSettingSchema = exports.settingsTable = exports.insertChannelSchema = exports.channelsTable = exports.insertAdminSchema = exports.adminsTable = exports.insertUserSchema = exports.usersTable = void 0;
 const pg_core_1 = require("drizzle-orm/pg-core");
 const drizzle_zod_1 = require("drizzle-zod");
 // ── Users ──────────────────────────────────────────────────────────────────
@@ -72,5 +72,13 @@ exports.videoRegistryTable = (0, pg_core_1.pgTable)("bot_video_registry", {
     sanitizedId: (0, pg_core_1.text)("sanitized_id").primaryKey(),
     url: (0, pg_core_1.text)("url").notNull(),
     createdAt: (0, pg_core_1.timestamp)("created_at").notNull().defaultNow(),
+});
+// ── Scheduled Telegram message deletion ────────────────────────────────────
+exports.scheduledMessageDeletionsTable = (0, pg_core_1.pgTable)("bot_scheduled_message_deletions", {
+    id: (0, pg_core_1.serial)("id").primaryKey(),
+    chatId: (0, pg_core_1.bigint)("chat_id", { mode: "number" }).notNull(),
+    messageId: (0, pg_core_1.integer)("message_id").notNull(),
+    deleteAt: (0, pg_core_1.timestamp)("delete_at", { withTimezone: true }).notNull(),
+    createdAt: (0, pg_core_1.timestamp)("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 //# sourceMappingURL=schema.js.map

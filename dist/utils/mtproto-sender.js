@@ -38,10 +38,16 @@ function handleWorkerMessage(line) {
         return;
     clearTimeout(pending.timeout);
     pendingTransfers.delete(id);
-    if (message["ok"] === true)
-        pending.resolve();
-    else
+    if (message["ok"] === true) {
+        const messageId = Number(message["messageId"]);
+        if (Number.isInteger(messageId) && messageId > 0)
+            pending.resolve(messageId);
+        else
+            pending.reject(new Error("MTProto transfer returned no Telegram message ID"));
+    }
+    else {
         pending.reject(new Error(String(message["error"] || "MTProto file transfer failed")));
+    }
 }
 function isMtprotoSenderReady() {
     return workerReady;

@@ -7,13 +7,14 @@ interface TransferRequest {
   filePath: string;
   mediaType: "audio" | "video";
   caption: string;
+  thumbnailPath?: string;
   title?: string;
   performer?: string;
   duration?: number;
 }
 
 interface PendingTransfer {
-  resolve(): void;
+  resolve(messageId: number): void;
   reject(error: Error): void;
   timeout: NodeJS.Timeout;
 }
@@ -52,8 +53,13 @@ function handleWorkerMessage(line: string): void {
 
   clearTimeout(pending.timeout);
   pendingTransfers.delete(id);
-  if (message["ok"] === true) pending.resolve();
-  else pending.reject(new Error(String(message["error"] || "MTProto file transfer failed")));
+  if (message["ok"] === true) {
+    const messageId = Number(message["messageId"]);
+    if (Number.isInteger(messageId) && messageId > 0) pending.resolve(messageId);
+    else pending.reject(new Error("MTProto transfer returned no Telegram message ID"));
+  } else {
+    pending.reject(new Error(String(message["error"] || "MTProto file transfer failed")));
+  }
 }
 
 export function isMtprotoSenderReady(): boolean {
@@ -151,7 +157,7 @@ export async function startMtprotoSender(expectedBotId: number): Promise<boolean
   return startPromise;
 }
 
-export function sendMediaViaMtproto(request: Omit<TransferRequest, "id">): Promise<void> {
+export function sendMediaViaMtproto(request: Omit<TransferRequest, "id">): Promise<number> {
   if (!worker || !workerReady || !worker.stdin.writable) {
     return Promise.reject(new Error("رفع الوسائط عبر MTProto غير جاهز؛ تحقق من إعدادات API ID وAPI Hash"));
   }
@@ -159,7 +165,7 @@ export function sendMediaViaMtproto(request: Omit<TransferRequest, "id">): Promi
   const id = `${Date.now()}-${++nextRequestId}`;
   const payload: TransferRequest = { ...request, id };
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<number>((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingTransfers.delete(id);
       reject(new Error("انتهت مهلة إرسال الملف عبر MTProto"));

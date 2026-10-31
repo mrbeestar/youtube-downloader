@@ -6,7 +6,14 @@ import https from "node:https";
 import http from "node:http";
 import { createWriteStream, existsSync, mkdirSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { upsertUser, isAdmin, isUserBanned, getSettings, getActiveChannels } from "./db.js";
+import {
+  upsertUser,
+  isAdmin,
+  isUserBanned,
+  getSettings,
+  getActiveChannels,
+  ensureScheduledMessageDeletionsTable,
+} from "./db.js";
 import { checkSubscription } from "./middleware/subscription.js";
 import { handleUrl, handleDownloadCallback, setBotUsername } from "./handlers/download.js";
 import { sendAdminPanel, handleAdminCallback, handleAwaitingInput } from "./handlers/admin.js";
@@ -14,6 +21,7 @@ import { handleSearch, handleSearchPage, handleKCommand } from "./handlers/searc
 import { logger } from "./logger.js";
 import { cleanupStaleDownloadDirs, detectPlatform, YT_DLP_PATH } from "./utils/downloader.js";
 import { startMtprotoSender, stopMtprotoSender } from "./utils/mtproto-sender.js";
+import { startMessageExpirationWorker } from "./utils/message-expiration.js";
 
 // ── yt-dlp auto-install ───────────────────────────────────────────────────
 
@@ -214,6 +222,9 @@ async function main(): Promise<void> {
 
   const ownerId = parseInt(process.env["OWNER_ID"] || "0", 10);
   const bot = new Telegraf(token);
+
+  await ensureScheduledMessageDeletionsTable();
+  startMessageExpirationWorker(bot.telegram);
 
   const me = await bot.telegram.getMe();
   setBotUsername(me.username ?? "YourBot");

@@ -96,3 +96,14 @@ export const videoRegistryTable = pgTable("bot_video_registry", {
 
 export type VideoRegistry = typeof videoRegistryTable.$inferSelect;
 
+// ── Scheduled Telegram message deletion ────────────────────────────────────
+export const scheduledMessageDeletionsTable = pgTable("bot_scheduled_message_deletions", {
+  id: serial("id").primaryKey(),
+  chatId: bigint("chat_id", { mode: "number" }).notNull(),
+  messageId: integer("message_id").notNull(),
+  deleteAt: timestamp("delete_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ScheduledMessageDeletion = typeof scheduledMessageDeletionsTable.$inferSelect;
+

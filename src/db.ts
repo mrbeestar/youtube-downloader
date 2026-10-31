@@ -6,10 +6,11 @@ import {
   settingsTable,
   downloadLogsTable,
   videoRegistryTable,
+  scheduledMessageDeletionsTable,
   SETTINGS_KEYS,
   type InsertDownloadLog,
 } from "./schema.js";
-import { eq, count, sql, lt } from "drizzle-orm";
+import { eq, count, sql, lt, lte } from "drizzle-orm";
 
 // ── In-memory TTL caches ───────────────────────────────────────────────────
 
@@ -274,4 +275,53 @@ export async function cleanupOldVideoIds(): Promise<void> {
     .delete(videoRegistryTable)
     .where(lt(videoRegistryTable.createdAt, thirtyDaysAgo))
     .catch(() => {});
+}
+
+// ── Timed message deletion ─────────────────────────────────────────────────
+
+export async function ensureScheduledMessageDeletionsTable(): Promise<void> {
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS bot_scheduled_message_deletions (
+      id SERIAL PRIMARY KEY,
+      chat_id BIGINT NOT NULL,
+      message_id INTEGER NOT NULL,
+      delete_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `));
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS bot_scheduled_message_deletions_due_idx
+    ON bot_scheduled_message_deletions (delete_at)
+  `));
+}
+
+export async function scheduleMessageDeletions(
+  deletions: Array<{ chatId: number; messageId: number; deleteAt: Date }>,
+): Promise<void> {
+  if (deletions.length === 0) return;
+  await db.insert(scheduledMessageDeletionsTable).values(deletions);
+}
+
+export async function getDueMessageDeletions(
+  now = new Date(),
+  limit = 100,
+): Promise<Array<typeof scheduledMessageDeletionsTable.$inferSelect>> {
+  return db
+    .select()
+    .from(scheduledMessageDeletionsTable)
+    .where(lte(scheduledMessageDeletionsTable.deleteAt, now))
+    .orderBy(scheduledMessageDeletionsTable.deleteAt)
+    .limit(limit);
+}
+
+export async function removeScheduledMessageDeletion(id: number): Promise<void> {
+  await db.delete(scheduledMessageDeletionsTable).where(eq(scheduledMessageDeletionsTable.id, id));
+}
+
+export async function retryScheduledMessageDeletion(id: number): Promise<void> {
+  const retryAt = new Date(Date.now() + 5 * 60 * 1000);
+  await db
+    .update(scheduledMessageDeletionsTable)
+    .set({ deleteAt: retryAt })
+    .where(eq(scheduledMessageDeletionsTable.id, id));
 }

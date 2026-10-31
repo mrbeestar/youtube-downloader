@@ -65,6 +65,50 @@ async def extract_audio_thumbnail(audio_path: Path, output_path: Path):
     return None
 
 
+async def prepare_video_thumbnail(source_path: Path, output_path: Path, extract_from_video=False):
+    for quality in ("4", "8", "12"):
+        output_path.unlink(missing_ok=True)
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+        ]
+        if extract_from_video:
+            command.extend(["-ss", "0.5"])
+        command.extend([
+            "-i",
+            str(source_path),
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=320:320:force_original_aspect_ratio=decrease",
+            "-q:v",
+            quality,
+            str(output_path),
+        ])
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.communicate()
+        except FileNotFoundError:
+            logging.warning("ffmpeg is unavailable; sending video without a cover thumbnail")
+            return None
+
+        if process.returncode == 0 and output_path.is_file():
+            size = output_path.stat().st_size
+            if 0 < size <= 200 * 1024:
+                return output_path
+
+    return None
+
+
 async def main():
     token = os.environ.get("BOT_TOKEN", "").strip()
     api_id_value = os.environ.get("TELEGRAM_API_ID", "").strip()
@@ -140,12 +184,30 @@ async def main():
                             thumb=str(thumbnail_path) if thumbnail_path else None,
                         )
                 elif media_type == "video":
-                    message = await client.send_video(
-                        chat_id=chat_id,
-                        video=str(file_path),
-                        caption=caption,
-                        supports_streaming=True,
-                    )
+                    with tempfile.TemporaryDirectory(prefix="video-cover-") as temp_dir:
+                        cover_path = Path(temp_dir) / "cover.jpg"
+                        thumbnail_path = request.get("thumbnailPath")
+                        thumbnail = None
+                        if thumbnail_path:
+                            thumbnail_source = Path(str(thumbnail_path))
+                            if thumbnail_source.is_file():
+                                thumbnail = await prepare_video_thumbnail(
+                                    thumbnail_source,
+                                    cover_path,
+                                )
+                        if thumbnail is None:
+                            thumbnail = await prepare_video_thumbnail(
+                                file_path,
+                                cover_path,
+                                extract_from_video=True,
+                            )
+                        message = await client.send_video(
+                            chat_id=chat_id,
+                            video=str(file_path),
+                            caption=caption,
+                            supports_streaming=True,
+                            thumb=str(thumbnail) if thumbnail else None,
+                        )
                 else:
                     raise ValueError("Unsupported media type")
 

@@ -12,6 +12,8 @@ let BOT_USERNAME = "YourBot";
 function setBotUsername(u) { BOT_USERNAME = u; }
 const pendingDownloads = new Map();
 const PENDING_DOWNLOAD_TTL_MS = 15 * 60 * 1000;
+const FILE_EXPIRY_MS = 60 * 60 * 1000;
+const FILE_EXPIRY_WARNING = "تنبيه : هذا الملف سيتم حذفه بعد ساعة من الان قم باعادة ارسالة الى رسائلك المحفوظة";
 const PLATFORM_NAMES = {
     youtube: "يوتيوب",
     tiktok: "تيك توك",
@@ -56,10 +58,11 @@ async function performDownloadAndSend(ctx, { url, title, platform, formatId, cha
         }
         const result = await (0, downloader_js_1.downloadMedia)(url, formatId, platform);
         downloadedFilePath = result.filePath;
-        await (0, mtproto_sender_js_1.sendMediaViaMtproto)({
+        const sentFileMessageId = await (0, mtproto_sender_js_1.sendMediaViaMtproto)({
             chatId,
             filePath: result.filePath,
             mediaType: formatId === "audio_only" ? "audio" : "video",
+            thumbnailPath: formatId === "audio_only" ? undefined : result.thumbnailPath,
             caption: formatId === "audio_only"
                 ? `${album ? `💿 الألبوم: ${album.slice(0, 256)}\n` : ""}@${BOT_USERNAME}`
                 : `@${BOT_USERNAME}`,
@@ -67,6 +70,26 @@ async function performDownloadAndSend(ctx, { url, title, platform, formatId, cha
             performer: formatId === "audio_only" ? performer : undefined,
             duration: formatId === "audio_only" ? duration : undefined,
         });
+        let warningMessageId;
+        try {
+            const deleteAt = new Date(Date.now() + FILE_EXPIRY_MS);
+            const warning = await ctx.telegram.sendMessage(chatId, FILE_EXPIRY_WARNING);
+            warningMessageId = warning.message_id;
+            await (0, db_js_1.scheduleMessageDeletions)([
+                { chatId, messageId: sentFileMessageId, deleteAt },
+                { chatId, messageId: warningMessageId, deleteAt },
+            ]);
+        }
+        catch {
+            const rollback = [
+                ctx.telegram.deleteMessage(chatId, sentFileMessageId).catch(() => false),
+            ];
+            if (warningMessageId !== undefined) {
+                rollback.push(ctx.telegram.deleteMessage(chatId, warningMessageId).catch(() => false));
+            }
+            await Promise.all(rollback);
+            throw new Error("تعذر جدولة الحذف التلقائي؛ حاول إرسال الملف مرة أخرى بعد قليل.");
+        }
         await status.remove();
         await (0, db_js_1.incrementDownloadCount)(userId);
         await (0, db_js_1.logDownload)({ userId, url, platform, quality: formatId, status: "success" });

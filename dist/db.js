@@ -26,6 +26,11 @@ exports.isPlatformEnabled = isPlatformEnabled;
 exports.saveVideoId = saveVideoId;
 exports.getVideoUrl = getVideoUrl;
 exports.cleanupOldVideoIds = cleanupOldVideoIds;
+exports.ensureScheduledMessageDeletionsTable = ensureScheduledMessageDeletionsTable;
+exports.scheduleMessageDeletions = scheduleMessageDeletions;
+exports.getDueMessageDeletions = getDueMessageDeletions;
+exports.removeScheduledMessageDeletion = removeScheduledMessageDeletion;
+exports.retryScheduledMessageDeletion = retryScheduledMessageDeletion;
 const database_js_1 = require("./database.js");
 const schema_js_1 = require("./schema.js");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -235,5 +240,44 @@ async function cleanupOldVideoIds() {
         .delete(schema_js_1.videoRegistryTable)
         .where((0, drizzle_orm_1.lt)(schema_js_1.videoRegistryTable.createdAt, thirtyDaysAgo))
         .catch(() => { });
+}
+// ── Timed message deletion ─────────────────────────────────────────────────
+async function ensureScheduledMessageDeletionsTable() {
+    await database_js_1.db.execute(drizzle_orm_1.sql.raw(`
+    CREATE TABLE IF NOT EXISTS bot_scheduled_message_deletions (
+      id SERIAL PRIMARY KEY,
+      chat_id BIGINT NOT NULL,
+      message_id INTEGER NOT NULL,
+      delete_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `));
+    await database_js_1.db.execute(drizzle_orm_1.sql.raw(`
+    CREATE INDEX IF NOT EXISTS bot_scheduled_message_deletions_due_idx
+    ON bot_scheduled_message_deletions (delete_at)
+  `));
+}
+async function scheduleMessageDeletions(deletions) {
+    if (deletions.length === 0)
+        return;
+    await database_js_1.db.insert(schema_js_1.scheduledMessageDeletionsTable).values(deletions);
+}
+async function getDueMessageDeletions(now = new Date(), limit = 100) {
+    return database_js_1.db
+        .select()
+        .from(schema_js_1.scheduledMessageDeletionsTable)
+        .where((0, drizzle_orm_1.lte)(schema_js_1.scheduledMessageDeletionsTable.deleteAt, now))
+        .orderBy(schema_js_1.scheduledMessageDeletionsTable.deleteAt)
+        .limit(limit);
+}
+async function removeScheduledMessageDeletion(id) {
+    await database_js_1.db.delete(schema_js_1.scheduledMessageDeletionsTable).where((0, drizzle_orm_1.eq)(schema_js_1.scheduledMessageDeletionsTable.id, id));
+}
+async function retryScheduledMessageDeletion(id) {
+    const retryAt = new Date(Date.now() + 5 * 60 * 1000);
+    await database_js_1.db
+        .update(schema_js_1.scheduledMessageDeletionsTable)
+        .set({ deleteAt: retryAt })
+        .where((0, drizzle_orm_1.eq)(schema_js_1.scheduledMessageDeletionsTable.id, id));
 }
 //# sourceMappingURL=db.js.map

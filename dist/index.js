@@ -19,6 +19,7 @@ const search_js_1 = require("./handlers/search.js");
 const logger_js_1 = require("./logger.js");
 const downloader_js_1 = require("./utils/downloader.js");
 const mtproto_sender_js_1 = require("./utils/mtproto-sender.js");
+const message_expiration_js_1 = require("./utils/message-expiration.js");
 // ── yt-dlp auto-install ───────────────────────────────────────────────────
 function downloadFile(url, dest, redirects = 8) {
     return new Promise((resolve, reject) => {
@@ -190,6 +191,8 @@ async function main() {
     }
     const ownerId = parseInt(process.env["OWNER_ID"] || "0", 10);
     const bot = new telegraf_1.Telegraf(token);
+    await (0, db_js_1.ensureScheduledMessageDeletionsTable)();
+    (0, message_expiration_js_1.startMessageExpirationWorker)(bot.telegram);
     const me = await bot.telegram.getMe();
     (0, download_js_1.setBotUsername)(me.username ?? "YourBot");
     logger_js_1.logger.info({ username: me.username }, "Bot identity fetched");

@@ -129,9 +129,11 @@ async function downloadMedia(url, formatId, platform, onProgress) {
             args.push("-x", "--audio-format", "mp3", "--audio-quality", "0", "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg");
         }
         else if (formatId === "best_video") {
+            args.push("--write-thumbnail", "--convert-thumbnails", "jpg");
             args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best");
         }
         else {
+            args.push("--write-thumbnail", "--convert-thumbnails", "jpg");
             const height = formatId.replace("video_", "");
             args.push("-f", `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`);
         }
@@ -192,12 +194,31 @@ async function downloadMedia(url, formatId, platform, onProgress) {
                         await fail(new Error("المسار الناتج ليس ملف وسائط"));
                         return;
                     }
+                    let thumbnailPath;
+                    if (formatId !== "audio_only") {
+                        const thumbnailNames = files
+                            .filter((name) => [".jpg", ".jpeg", ".png", ".webp"].includes((0, node_path_1.extname)(name).toLowerCase()))
+                            .sort((a, b) => {
+                            const extA = (0, node_path_1.extname)(a).toLowerCase();
+                            const extB = (0, node_path_1.extname)(b).toLowerCase();
+                            return (extA === ".jpg" ? 0 : 1) - (extB === ".jpg" ? 0 : 1);
+                        });
+                        for (const name of thumbnailNames) {
+                            const path = (0, node_path_1.join)(outputDir, name);
+                            const info = await (0, promises_1.stat)(path).catch(() => undefined);
+                            if (info?.isFile() && info.size > 0) {
+                                thumbnailPath = path;
+                                break;
+                            }
+                        }
+                    }
                     settled = true;
                     resolve({
                         filePath: media.path,
                         fileName: media.name,
                         fileSize: media.size,
                         ext: media.extension.slice(1),
+                        thumbnailPath,
                     });
                 }
                 catch (err) {
