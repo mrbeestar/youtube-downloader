@@ -1,0 +1,2 @@
+Kurigram==2.2.25
+TgCrypto==1.2.5
