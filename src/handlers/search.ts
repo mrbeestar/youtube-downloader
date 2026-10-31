@@ -49,12 +49,12 @@ export async function getUrlByCommandId(sanitizedId: string): Promise<string | u
   return fromDb;
 }
 
-// تنظيف يومي: يعمل مرة عند التشغيل ثم كل 24 ساعة
-// (الدالة نفسها تحذف فقط السجلات الأقدم من 30 يوماً)
-(async () => {
-  await cleanupOldVideoIds();
-  setInterval(() => { cleanupOldVideoIds().catch(() => {}); }, 24 * 60 * 60 * 1000);
-})().catch(() => {});
+// تنظيف يومي: يعمل عند التشغيل ثم كل 24 ساعة، ولا يمنع إيقاف الخدمة.
+void cleanupOldVideoIds().catch(() => {});
+const videoRegistryCleanupTimer = setInterval(() => {
+  cleanupOldVideoIds().catch(() => {});
+}, 24 * 60 * 60 * 1000);
+videoRegistryCleanupTimer.unref();
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────
 

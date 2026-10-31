@@ -34,12 +34,12 @@ async function getUrlByCommandId(sanitizedId) {
         videoRegistry.set(sanitizedId, fromDb);
     return fromDb;
 }
-// تنظيف يومي: يعمل مرة عند التشغيل ثم كل 24 ساعة
-// (الدالة نفسها تحذف فقط السجلات الأقدم من 30 يوماً)
-(async () => {
-    await (0, db_js_1.cleanupOldVideoIds)();
-    setInterval(() => { (0, db_js_1.cleanupOldVideoIds)().catch(() => { }); }, 24 * 60 * 60 * 1000);
-})().catch(() => { });
+// تنظيف يومي: يعمل عند التشغيل ثم كل 24 ساعة، ولا يمنع إيقاف الخدمة.
+void (0, db_js_1.cleanupOldVideoIds)().catch(() => { });
+const videoRegistryCleanupTimer = setInterval(() => {
+    (0, db_js_1.cleanupOldVideoIds)().catch(() => { });
+}, 24 * 60 * 60 * 1000);
+videoRegistryCleanupTimer.unref();
 // ── Fetch helpers ─────────────────────────────────────────────────────────
 async function fetchChunk(query, start, end) {
     const safeQuery = query.trim().slice(0, 200);

@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.db = exports.pool = void 0;
+exports.closeDatabase = closeDatabase;
 const node_postgres_1 = require("drizzle-orm/node-postgres");
 const pg_1 = __importDefault(require("pg"));
 const schema = __importStar(require("./schema.js"));
@@ -51,4 +52,7 @@ exports.pool = new Pool({
     connectionTimeoutMillis: 5_000,
 });
 exports.db = (0, node_postgres_1.drizzle)(exports.pool, { schema });
+async function closeDatabase() {
+    await exports.pool.end();
+}
 //# sourceMappingURL=database.js.map

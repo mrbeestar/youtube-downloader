@@ -12,6 +12,7 @@ const node_http_1 = __importDefault(require("node:http"));
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const db_js_1 = require("./db.js");
+const database_js_1 = require("./database.js");
 const subscription_js_1 = require("./middleware/subscription.js");
 const download_js_1 = require("./handlers/download.js");
 const admin_js_1 = require("./handlers/admin.js");
@@ -381,14 +382,39 @@ async function main() {
         }
     }, 60 * 60 * 1000);
     throttleMapCleanup.unref();
+    let shuttingDown = false;
     const shutdown = (signal) => {
+        if (shuttingDown)
+            return;
+        shuttingDown = true;
         clearInterval(staleDownloadsCleanup);
         clearInterval(throttleMapCleanup);
         if (weeklyYtDlpUpdateTimer)
             clearTimeout(weeklyYtDlpUpdateTimer);
         stopMessageExpirationWorker();
-        bot.stop(signal);
-        void (0, mtproto_sender_js_1.stopMtprotoSender)();
+        try {
+            bot.stop(signal);
+        }
+        catch (err) {
+            logger_js_1.logger.warn({ err }, "Bot polling stop raised an error during shutdown");
+        }
+        const forceExit = setTimeout(() => {
+            logger_js_1.logger.error("Graceful shutdown timed out; exiting");
+            process.exit(1);
+        }, 20_000);
+        void (async () => {
+            try {
+                await (0, mtproto_sender_js_1.stopMtprotoSender)();
+                await (0, database_js_1.closeDatabase)();
+            }
+            catch (err) {
+                logger_js_1.logger.warn({ err }, "A service component failed to close cleanly");
+            }
+            finally {
+                clearTimeout(forceExit);
+                process.exit(0);
+            }
+        })();
     };
     process.once("SIGINT", () => shutdown("SIGINT"));
     process.once("SIGTERM", () => shutdown("SIGTERM"));
@@ -402,6 +428,7 @@ main().catch((err) => {
     logger_js_1.logger.error({ err }, "Fatal startup error");
     void (async () => {
         await (0, mtproto_sender_js_1.stopMtprotoSender)().catch(() => { });
+        await (0, database_js_1.closeDatabase)().catch(() => { });
         process.exit(1);
     })();
 });

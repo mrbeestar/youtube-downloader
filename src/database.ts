@@ -15,3 +15,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 export const db = drizzle(pool, { schema });
+
+export async function closeDatabase(): Promise<void> {
+  await pool.end();
+}

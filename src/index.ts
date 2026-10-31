@@ -14,6 +14,7 @@ import {
   getActiveChannels,
   ensureScheduledMessageDeletionsTable,
 } from "./db.js";
+import { closeDatabase } from "./database.js";
 import { checkSubscription } from "./middleware/subscription.js";
 import { handleUrl, handleDownloadCallback, setBotUsername } from "./handlers/download.js";
 import { sendAdminPanel, handleAdminCallback, handleAwaitingInput } from "./handlers/admin.js";
@@ -438,13 +439,36 @@ async function main(): Promise<void> {
   }, 60 * 60 * 1000);
   throttleMapCleanup.unref();
 
+  let shuttingDown = false;
   const shutdown = (signal: "SIGINT" | "SIGTERM") => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     clearInterval(staleDownloadsCleanup);
     clearInterval(throttleMapCleanup);
     if (weeklyYtDlpUpdateTimer) clearTimeout(weeklyYtDlpUpdateTimer);
     stopMessageExpirationWorker();
-    bot.stop(signal);
-    void stopMtprotoSender();
+    try {
+      bot.stop(signal);
+    } catch (err) {
+      logger.warn({ err }, "Bot polling stop raised an error during shutdown");
+    }
+
+    const forceExit = setTimeout(() => {
+      logger.error("Graceful shutdown timed out; exiting");
+      process.exit(1);
+    }, 20_000);
+
+    void (async () => {
+      try {
+        await stopMtprotoSender();
+        await closeDatabase();
+      } catch (err) {
+        logger.warn({ err }, "A service component failed to close cleanly");
+      } finally {
+        clearTimeout(forceExit);
+        process.exit(0);
+      }
+    })();
   };
   process.once("SIGINT",  () => shutdown("SIGINT"));
   process.once("SIGTERM", () => shutdown("SIGTERM"));
@@ -460,6 +484,7 @@ main().catch((err) => {
   logger.error({ err }, "Fatal startup error");
   void (async () => {
     await stopMtprotoSender().catch(() => {});
+    await closeDatabase().catch(() => {});
     process.exit(1);
   })();
 });
