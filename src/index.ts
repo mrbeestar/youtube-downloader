@@ -409,8 +409,6 @@ async function main(): Promise<void> {
   bot.catch((err: unknown) => { logger.error({ err }, "Bot error"); });
 
   // ── Launch ────────────────────────────────────────────────────────────────
-  await bot.launch({ allowedUpdates: ["message", "callback_query"] });
-  logger.info("Telegram bot started (polling)");
   scheduleWeeklyYtDlpUpdate();
 
   const shutdown = (signal: "SIGINT" | "SIGTERM") => {
@@ -433,6 +431,12 @@ async function main(): Promise<void> {
     }
   }, 60 * 60 * 1000);
   throttleMapCleanup.unref();
+
+  void bot.launch({ allowedUpdates: ["message", "callback_query"] }).catch((err) => {
+    logger.error({ err }, "Telegram bot polling failed");
+    process.exit(1);
+  });
+  logger.info("Telegram bot polling startup requested");
 }
 
 main().catch((err) => {

@@ -363,8 +363,6 @@ async function main() {
     // ── Error handler ─────────────────────────────────────────────────────────
     bot.catch((err) => { logger_js_1.logger.error({ err }, "Bot error"); });
     // ── Launch ────────────────────────────────────────────────────────────────
-    await bot.launch({ allowedUpdates: ["message", "callback_query"] });
-    logger_js_1.logger.info("Telegram bot started (polling)");
     scheduleWeeklyYtDlpUpdate();
     const shutdown = (signal) => {
         bot.stop(signal);
@@ -385,6 +383,11 @@ async function main() {
         }
     }, 60 * 60 * 1000);
     throttleMapCleanup.unref();
+    void bot.launch({ allowedUpdates: ["message", "callback_query"] }).catch((err) => {
+        logger_js_1.logger.error({ err }, "Telegram bot polling failed");
+        process.exit(1);
+    });
+    logger_js_1.logger.info("Telegram bot polling startup requested");
 }
 main().catch((err) => {
     logger_js_1.logger.error({ err }, "Fatal startup error");
