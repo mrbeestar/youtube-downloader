@@ -14,10 +14,12 @@
   "dependencies": {
     "dotenv": "^16.4.0",
     "drizzle-orm": "^0.44.2",
+    "drizzle-zod": "^0.7.0",
     "pg": "^8.16.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

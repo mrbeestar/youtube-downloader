@@ -1,4 +1,6 @@
 import { pgTable, bigint, text, boolean, timestamp, integer, serial } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
 
 // ── Users ──────────────────────────────────────────────────────────────────
 export const usersTable = pgTable("bot_users", {
@@ -13,6 +15,8 @@ export const usersTable = pgTable("bot_users", {
   lastActiveAt: timestamp("last_active_at").notNull().defaultNow(),
 });
 
+export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true, lastActiveAt: true });
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
 
 // ── Admins ─────────────────────────────────────────────────────────────────
@@ -24,6 +28,8 @@ export const adminsTable = pgTable("bot_admins", {
   addedAt: timestamp("added_at").notNull().defaultNow(),
 });
 
+export const insertAdminSchema = createInsertSchema(adminsTable).omit({ addedAt: true });
+export type InsertAdmin = z.infer<typeof insertAdminSchema>;
 export type Admin = typeof adminsTable.$inferSelect;
 
 // ── Channels ───────────────────────────────────────────────────────────────
@@ -37,6 +43,8 @@ export const channelsTable = pgTable("bot_channels", {
   addedAt: timestamp("added_at").notNull().defaultNow(),
 });
 
+export const insertChannelSchema = createInsertSchema(channelsTable).omit({ id: true, addedAt: true });
+export type InsertChannel = z.infer<typeof insertChannelSchema>;
 export type Channel = typeof channelsTable.$inferSelect;
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -46,6 +54,8 @@ export const settingsTable = pgTable("bot_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const insertSettingSchema = createInsertSchema(settingsTable).omit({ updatedAt: true });
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
 export type Setting = typeof settingsTable.$inferSelect;
 
 export const SETTINGS_KEYS = {
@@ -73,7 +83,8 @@ export const downloadLogsTable = pgTable("bot_download_logs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export type InsertDownloadLog = Omit<typeof downloadLogsTable.$inferInsert, "id" | "createdAt">;
+export const insertDownloadLogSchema = createInsertSchema(downloadLogsTable).omit({ id: true, createdAt: true });
+export type InsertDownloadLog = z.infer<typeof insertDownloadLogSchema>;
 export type DownloadLog = typeof downloadLogsTable.$inferSelect;
 
 // ── Video Registry (معرفات نتائج البحث — تبقى شهراً) ────────────────────
